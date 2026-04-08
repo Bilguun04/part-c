@@ -29,20 +29,14 @@ BASE_URL = "http://localhost:4567"
 TODOS_URL = f"{BASE_URL}/todos"
 HEADERS = {"Content-Type": "application/json"}
 
-# ── workload sizes to test ───────────────────────────────────────────────────
 OBJECT_COUNTS = [10, 50, 100, 200, 500]
 RESULTS_FILE = "performance_results.csv"
-
-# ── resource snapshot helpers ────────────────────────────────────────────────
 
 def snapshot_resources():
     """Return (cpu_percent, available_mb) at this instant."""
     cpu = psutil.cpu_percent(interval=0.1)
     mem = psutil.virtual_memory().available / (1024 * 1024)
     return cpu, mem
-
-
-# ── resource monitor (background thread) ─────────────────────────────────────
 
 class ResourceMonitor:
     """Collects CPU / memory samples in the background while an operation runs."""
@@ -76,9 +70,6 @@ class ResourceMonitor:
     @property
     def avg_mem(self):
         return sum(self._mems) / len(self._mems) if self._mems else 0.0
-
-
-# ── API helpers ───────────────────────────────────────────────────────────────
 
 def random_string(length=8):
     return "".join(random.choices(string.ascii_letters, k=length))
@@ -127,9 +118,6 @@ def delete_all_todos():
         except Exception:
             pass
 
-
-# ── experiment runner ─────────────────────────────────────────────────────────
-
 def run_experiment(n: int):
     """
     Populate the DB with n todos, then measure:
@@ -140,24 +128,21 @@ def run_experiment(n: int):
     """
     delete_all_todos()
 
-    # populate with n items using random data
     ids = []
     for _ in range(n):
         ids.append(create_todo())
 
-    # ── CREATE experiment ──────────────────────────────────────────────────
     monitor = ResourceMonitor()
     monitor.start()
     t0 = time.perf_counter()
     new_id = create_todo(title=f"Perf-Create-{n}")
-    create_time = (time.perf_counter() - t0) * 1000  # ms
+    create_time = (time.perf_counter() - t0) * 1000
     monitor.stop()
     create_cpu = monitor.avg_cpu
     create_mem = monitor.avg_mem
     ids.append(new_id)
 
-    # ── DELETE experiment ──────────────────────────────────────────────────
-    target_id = ids[len(ids) // 2]  # pick from middle
+    target_id = ids[len(ids) // 2]
     monitor = ResourceMonitor()
     monitor.start()
     t0 = time.perf_counter()
@@ -168,7 +153,6 @@ def run_experiment(n: int):
     delete_mem = monitor.avg_mem
     ids.remove(target_id)
 
-    # ── UPDATE experiment ──────────────────────────────────────────────────
     target_id = ids[0]
     monitor = ResourceMonitor()
     monitor.start()
@@ -194,9 +178,6 @@ def run_experiment(n: int):
         "update_mem_mb": round(update_mem, 1),
     }
 
-
-# ── repeated runs for statistical stability ────────────────────────────────
-
 def run_all_experiments(runs_per_size=3):
     all_rows = []
     for n in OBJECT_COUNTS:
@@ -210,9 +191,6 @@ def run_all_experiments(runs_per_size=3):
                 f"delete={row['delete_ms']}ms  update={row['update_ms']}ms"
             )
     return all_rows
-
-
-# ── aggregate + save ───────────────────────────────────────────────────────
 
 def aggregate(rows):
     df = pd.DataFrame(rows)
@@ -255,9 +233,6 @@ def save_csv(rows, path):
         writer.writeheader()
         writer.writerows(rows)
     print(f"Raw results saved → {path}")
-
-
-# ── chart generation ───────────────────────────────────────────────────────
 
 def generate_charts(agg: pd.DataFrame, out_dir: str):
     os.makedirs(out_dir, exist_ok=True)
@@ -309,9 +284,6 @@ def generate_charts(agg: pd.DataFrame, out_dir: str):
 
     return path1, path2, path3
 
-
-# ── Excel summary report ───────────────────────────────────────────────────
-
 def generate_excel(raw_df: pd.DataFrame, agg: pd.DataFrame, out_path: str):
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -320,7 +292,6 @@ def generate_excel(raw_df: pd.DataFrame, agg: pd.DataFrame, out_path: str):
 
     wb = Workbook()
 
-    # ── Sheet 1: Summary ─────────────────────────────────────────────────────
     ws = wb.active
     ws.title = "Summary"
 
@@ -373,7 +344,6 @@ def generate_excel(raw_df: pd.DataFrame, agg: pd.DataFrame, out_path: str):
 
     ws.freeze_panes = "A2"
 
-    # ── Sheet 2: Raw Data ─────────────────────────────────────────────────────
     ws2 = wb.create_sheet("Raw Data")
     raw_cols = list(raw_df.columns)
     ws2.append(raw_cols)
@@ -388,7 +358,6 @@ def generate_excel(raw_df: pd.DataFrame, agg: pd.DataFrame, out_path: str):
     for col in ws2.columns:
         ws2.column_dimensions[get_column_letter(col[0].column)].width = 16
 
-    # ── Sheet 3: Charts ───────────────────────────────────────────────────────
     ws3 = wb.create_sheet("Charts")
     chart_dir = os.path.join(os.path.dirname(out_path), "charts")
     chart_files = ["transaction_time.png", "cpu_usage.png", "memory_usage.png"]
@@ -406,9 +375,6 @@ def generate_excel(raw_df: pd.DataFrame, agg: pd.DataFrame, out_path: str):
 
     wb.save(out_path)
     print(f"Excel report saved → {out_path}")
-
-
-# ── entry point ────────────────────────────────────────────────────────────
 
 def main():
     print("ECSE-429 Part C – Performance Testing")
